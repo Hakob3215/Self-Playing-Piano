@@ -9,7 +9,6 @@ def convert_midi_to_csv(midi_path):
     """
     
     # Create the output CSV path based on the input MIDI path
-    # e.g., 'uploads/temp_upload.mid' becomes 'uploads/temp_upload.csv'
     csv_path = os.path.splitext(midi_path)[0] + '.csv'
     
     absolute_time = 0.0
@@ -26,10 +25,8 @@ def convert_midi_to_csv(midi_path):
                 if msg.type in ['note_on', 'note_off']:
                     writer.writerow([f"{absolute_time:.3f}", msg.type, msg.note, msg.velocity])
         
-        # Return the path of the file we just created
         return csv_path
 
     except Exception as e:
         print(f"Error during MIDI conversion: {e}")
-        # Re-raise the exception so app.py knows something went wrong
         raise
