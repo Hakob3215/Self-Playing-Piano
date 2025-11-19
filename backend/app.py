@@ -1,26 +1,16 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import os
-from queue_manager import QueueManager
-from serial_controller import SerialController
 from midi_processor import convert_midi_to_csv
 
 app = Flask(__name__)
-CORS(app) # Allow React UI to talk to this
-
-# Initialize our helpers
-queue_mgr = QueueManager()
-serial_ctrl = SerialController(port='COM3') # UPDATE THIS PORT!
-serial_ctrl.connect()
+CORS(app)
 
 UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+CURRENT_SONG_FILENAME = 'current.csv'
+CURRENT_SONG_PATH = os.path.join(UPLOAD_FOLDER, CURRENT_SONG_FILENAME)
 
-def play_next():
-    """Callback function: triggers when a song finishes"""
-    next_song = queue_mgr.get_next_song()
-    if next_song:
-        serial_ctrl.send_song(next_song, on_finish_callback=play_next)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -31,28 +21,41 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    # 1. Save MIDI
-    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(filepath)
+    # 1. Save the incoming MIDI temporarily
+    # We use a fixed temp name so we don't fill up the disk with old files
+    temp_midi_path = os.path.join(UPLOAD_FOLDER, 'temp_upload.mid')
+    file.save(temp_midi_path)
     
     # 2. Convert to CSV
-    csv_path = convert_midi_to_csv(filepath)
+    # This will generate 'temp_upload.csv' in the same folder
+    try:
+        generated_csv_path = convert_midi_to_csv(temp_midi_path)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
     
-    # 3. Add to Queue
-    queue_mgr.add_song(csv_path)
+    # 3. Overwrite the "current" file with this new one
+    if os.path.exists(CURRENT_SONG_PATH):
+        os.remove(CURRENT_SONG_PATH)
     
-    # 4. If nothing is playing, start immediately
-    if not serial_ctrl.is_playing:
-        play_next()
+    os.rename(generated_csv_path, CURRENT_SONG_PATH)
+    
+    # Clean up the temp midi file
+    if os.path.exists(temp_midi_path):
+        os.remove(temp_midi_path)
 
-    return jsonify({'message': 'File uploaded and queued', 'queue': queue_mgr.get_queue_list()})
+    return jsonify({'message': 'File updated. ESP will read this on next reset.'})
 
-@app.route('/queue', methods=['GET'])
-def get_queue():
-    return jsonify({
-        'current': queue_mgr.current_song,
-        'queue': queue_mgr.get_queue_list()
-    })
+@app.route('/current.csv', methods=['GET'])
+def get_current_song():
+    """
+    Endpoint for the ESP to fetch the file if it's using WiFi/HTTP,
+    or for debugging to see what the current song is.
+    """
+    if os.path.exists(CURRENT_SONG_PATH):
+        return send_file(CURRENT_SONG_PATH, mimetype='text/csv', as_attachment=False)
+    else:
+        return "No song uploaded yet", 404
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    # host='0.0.0.0' allows external devices (like an ESP on the same WiFi) to connect
+    app.run(port=5000, debug=True, host='0.0.0.0')
