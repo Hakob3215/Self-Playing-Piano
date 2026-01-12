@@ -27,56 +27,61 @@ def send_csv_to_esp(csv_path):
         return False
 
     try:
-        with serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1) as ser:
-            print(f"Connected to {SERIAL_PORT}")
-            
-            # Give the connection a moment to settle
-            time.sleep(2)
-            
-            # Send Start Signal
-            ser.write(b"START_UPLOAD\n")
-            print("Sent START_UPLOAD")
-            time.sleep(0.1) # small delay
+        # Connect with DTR disabled to prevent ESP reset on connect/disconnect
+        ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+        ser.dtr = False  # Disable DTR to prevent reset
+        ser.rts = False  # Disable RTS just in case
+        
+        print(f"Connected to {SERIAL_PORT}")
+        
+        # Give the connection a moment to settle
+        time.sleep(2)
+        
+        # Send Start Signal
+        ser.write(b"START_UPLOAD\n")
+        print("Sent START_UPLOAD")
+        time.sleep(0.1) # small delay
 
-            # Send File Content
-            with open(csv_path, 'r') as f:
-                for line in f:
-                    ser.write(line.encode('utf-8'))
-                    
-                    # Wait for ACK from ESP
-                    # This prevents buffer overflow on the ESP side
-                    start_time = time.time()
-                    ack_received = False
-                    while (time.time() - start_time) < 1.0: # 1 second timeout per line
-                        if ser.in_waiting > 0:
-                            response = ser.readline().decode('utf-8').strip()
-                            if response == "OK":
-                                ack_received = True
-                                break
-                    
-                    if not ack_received:
-                        print(f"Warning: No ACK received for line: {line.strip()}")
-            
-            # Send End Signal
-            ser.write(b"\nEND_UPLOAD\n") # Ensure newline before END
-            print("Sent END_UPLOAD")
-            
-            # --- DEBUG MONITORING ---
-            # Keep connection open briefly to read the "Playing..." message
-            # and any initial errors from the ESP
-            print("--- LISTENING FOR ESP LOGS (5 seconds) ---")
-            timeout_start = time.time()
-            while time.time() - timeout_start < 5.0:
-                if ser.in_waiting > 0:
-                    try:
-                        line_log = ser.readline().decode('utf-8', errors='ignore').strip()
-                        print(f"ESP LOG: {line_log}")
-                    except:
-                        pass
-                time.sleep(0.01)
-            print("--- CLOSING SERIAL CONNECTION ---")
+        # Send File Content
+        with open(csv_path, 'r') as f:
+            for line in f:
+                ser.write(line.encode('utf-8'))
+                
+                # Wait for ACK from ESP
+                # This prevents buffer overflow on the ESP side
+                start_time = time.time()
+                ack_received = False
+                while (time.time() - start_time) < 1.0: # 1 second timeout per line
+                    if ser.in_waiting > 0:
+                        response = ser.readline().decode('utf-8').strip()
+                        if response == "OK":
+                            ack_received = True
+                            break
+                
+                if not ack_received:
+                    print(f"Warning: No ACK received for line: {line.strip()}")
+        
+        # Send End Signal
+        ser.write(b"\nEND_UPLOAD\n") # Ensure newline before END
+        print("Sent END_UPLOAD")
+        
+        # --- DEBUG MONITORING ---
+        # Keep connection open briefly to read the "Playing..." message
+        # and any initial errors from the ESP
+        print("--- LISTENING FOR ESP LOGS (5 seconds) ---")
+        timeout_start = time.time()
+        while time.time() - timeout_start < 5.0:
+            if ser.in_waiting > 0:
+                try:
+                    line_log = ser.readline().decode('utf-8', errors='ignore').strip()
+                    print(f"ESP LOG: {line_log}")
+                except:
+                    pass
+            time.sleep(0.01)
+        print("--- CLOSING SERIAL CONNECTION ---")
 
-            return True
+        ser.close() # Close manually since we aren't using 'with' block anymore
+        return True
 
     except Exception as e:
         print(f"Serial Error: {e}")
