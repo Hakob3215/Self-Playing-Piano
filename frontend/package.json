@@ -39,7 +39,8 @@
       "electron/main.js"
     ],
     "win": {
-      "target": "portable"
+      "target": "portable",
+      "forceCodeSigning": false
     }
   }
 }

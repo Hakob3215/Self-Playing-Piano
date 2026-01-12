@@ -1,5 +1,6 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
+const isDev = !!process.env.ELECTRON_START_URL;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -7,13 +8,19 @@ function createWindow() {
     height: 600,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false, // Simplified for this local tool
+      contextIsolation: false,
     },
   });
 
-  // In dev, load from Vite server. In prod, load built file.
-  const startUrl = process.env.ELECTRON_START_URL || `file://${path.join(__dirname, '../dist/index.html')}`;
+  const startUrl = isDev
+    ? process.env.ELECTRON_START_URL
+    : `file://${path.join(__dirname, '../dist/index.html')}`;
+
   win.loadURL(startUrl);
+
+  if (isDev) {
+    win.webContents.openDevTools();
+  }
 }
 
 app.whenReady().then(createWindow);
