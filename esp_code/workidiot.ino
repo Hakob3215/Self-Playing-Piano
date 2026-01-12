@@ -31,29 +31,31 @@ enum State { STATE_WAITING, STATE_RECEIVING, STATE_PLAYING };
 State currentState = STATE_WAITING;
 
 bool readNextEvent(MidiEvent &evt) {
-  if (!midiFile.available()) return false;
+  while (true) {
+    if (!midiFile.available()) return false;
 
-  String line = midiFile.readStringUntil('\n');
-  line.trim();
-  if (line.length() == 0) return readNextEvent(evt); // Skip empty lines
+    String line = midiFile.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue; // Skip empty lines
 
-  int idx1 = line.indexOf(',');
-  int idx2 = line.indexOf(',', idx1 + 1);
-  int idx3 = line.indexOf(',', idx2 + 1);
+    int idx1 = line.indexOf(',');
+    int idx2 = line.indexOf(',', idx1 + 1);
+    int idx3 = line.indexOf(',', idx2 + 1);
 
-  if (idx1 < 0 || idx2 < 0 || idx3 < 0) return readNextEvent(evt); // malformed line
+    if (idx1 < 0 || idx2 < 0 || idx3 < 0) continue; // Skip malformed lines
 
-  evt.time = line.substring(0, idx1).toFloat();
-  line.substring(idx1 + 1, idx2).toCharArray(evt.type, sizeof(evt.type));
-  evt.note = line.substring(idx2 + 1, idx3).toInt();
-  evt.velocity = line.substring(idx3 + 1).toInt();
+    evt.time = line.substring(0, idx1).toFloat();
+    line.substring(idx1 + 1, idx2).toCharArray(evt.type, sizeof(evt.type));
+    evt.note = line.substring(idx2 + 1, idx3).toInt();
+    evt.velocity = line.substring(idx3 + 1).toInt();
 
-  return true;
+    return true;
+  }
 }
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {}
+  // while (!Serial) {} // REMOVED: prevents hanging on reset
 
   // Initialize SD Card
   if (!SD.begin(5, SPI, 4000000)) {
@@ -136,6 +138,7 @@ void loop() {
           // Ensure we don't write the start command if it slipped in (unlikely with logic above)
           if (line.indexOf("START_UPLOAD") < 0) {
              midiFile.println(line);
+             Serial.println("OK"); // Acknowledge receipt
           }
         }
       }

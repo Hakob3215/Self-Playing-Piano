@@ -13,7 +13,7 @@ CURRENT_SONG_FILENAME = 'current.csv'
 CURRENT_SONG_PATH = os.path.join(UPLOAD_FOLDER, CURRENT_SONG_FILENAME)
 
 # Serial Configuration - UPDATE THIS TO MATCH YOUR ESP DEVICE
-SERIAL_PORT = 'COM3'  # Windows example 'COM3', Linux/Mac '/dev/ttyUSB0'
+SERIAL_PORT = 'COM9'  # Windows example 'COM3', Linux/Mac '/dev/ttyUSB0'
 BAUD_RATE = 115200
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -42,8 +42,20 @@ def send_csv_to_esp(csv_path):
             with open(csv_path, 'r') as f:
                 for line in f:
                     ser.write(line.encode('utf-8'))
-                    # optional: wait for ack or just stream
-                    time.sleep(0.01) # fast stream with slight throttle
+                    
+                    # Wait for ACK from ESP
+                    # This prevents buffer overflow on the ESP side
+                    start_time = time.time()
+                    ack_received = False
+                    while (time.time() - start_time) < 1.0: # 1 second timeout per line
+                        if ser.in_waiting > 0:
+                            response = ser.readline().decode('utf-8').strip()
+                            if response == "OK":
+                                ack_received = True
+                                break
+                    
+                    if not ack_received:
+                        print(f"Warning: No ACK received for line: {line.strip()}")
             
             # Send End Signal
             ser.write(b"\nEND_UPLOAD\n") # Ensure newline before END
