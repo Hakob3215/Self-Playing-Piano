@@ -60,6 +60,22 @@ def send_csv_to_esp(csv_path):
             # Send End Signal
             ser.write(b"\nEND_UPLOAD\n") # Ensure newline before END
             print("Sent END_UPLOAD")
+            
+            # --- DEBUG MONITORING ---
+            # Keep connection open briefly to read the "Playing..." message
+            # and any initial errors from the ESP
+            print("--- LISTENING FOR ESP LOGS (5 seconds) ---")
+            timeout_start = time.time()
+            while time.time() - timeout_start < 5.0:
+                if ser.in_waiting > 0:
+                    try:
+                        line_log = ser.readline().decode('utf-8', errors='ignore').strip()
+                        print(f"ESP LOG: {line_log}")
+                    except:
+                        pass
+                time.sleep(0.01)
+            print("--- CLOSING SERIAL CONNECTION ---")
+
             return True
 
     except Exception as e:
